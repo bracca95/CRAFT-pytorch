@@ -168,20 +168,18 @@ if __name__ == '__main__':
         # divide the whole image into sub-images
         for r in range(args.divisor):
             for c in range(args.divisor):
-                part = image[r*part_h+1:(r+1)*part_h, c*part_w+1:(c+1)*part_w, :]
 
+                part = image[r*part_h+1:(r+1)*part_h, c*part_w+1:(c+1)*part_w, :]
                 bboxes, polys, score_text = test_net(net, part, args.text_threshold, args.link_threshold, args.low_text, args.cuda, args.poly, refine_net)
 
-                # save mask
-                filename, file_ext = os.path.splitext(os.path.basename(image_path))
-                if not os.path.exists(os.path.join(result_folder, filename)):
-                    grp_fold = os.path.join(result_folder, filename)
-                    os.makedirs(grp_fold)
+                # save full img
+                for i, box in enumerate(polys):
+                    # pts is a collection of array [width, height], the opposite of row, col
+                    pts = box.reshape((-1, 1, 2))
+                    pts = np.add([c*part_w, r*part_h], pts)
+                    cv2.polylines(image, np.int32([pts]), True, color=(0, 0, 255), thickness=2)
 
-                mask_file = os.path.join(grp_fold, f"res_{r}{c}_{filename}_mask.jpg")
-                cv2.imwrite(mask_file, score_text)
-
-                # save txt and result image
-                file_utils.saveResult(image_path, part[:,:,::-1], polys, r, c, dirname=grp_fold)
+        filename, ext = os.path.splitext(os.path.basename(image_path))
+        cv2.imwrite(os.path.join(result_folder, f"{filename}{ext}"), image[:, :, ::-1])
 
     print("elapsed time : {}s".format(time.time() - t))
