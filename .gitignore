@@ -4,3 +4,8 @@
 *.pth
 result*
 weights*
+
+figures/
+
+# macos stuff
+.DS_Store

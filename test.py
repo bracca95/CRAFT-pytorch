@@ -5,6 +5,7 @@ MIT License
 
 # -*- coding: utf-8 -*-
 import sys
+import math
 import os
 import time
 import argparse
@@ -40,9 +41,11 @@ def copyStateDict(state_dict):
     return new_state_dict
 
 def str2bool(v):
+    '''return True if the input work is in tuple. False otherwise'''
     return v.lower() in ("yes", "y", "true", "t", "1")
 
 parser = argparse.ArgumentParser(description='CRAFT Text Detection')
+parser.add_argument('--divisor', default=3, type=int, help='sub images (div * div')
 parser.add_argument('--trained_model', default='weights/craft_mlt_25k.pth', type=str, help='pretrained model')
 parser.add_argument('--text_threshold', default=0.7, type=float, help='text confidence threshold')
 parser.add_argument('--low_text', default=0.4, type=float, help='text low-bound score')
@@ -159,13 +162,26 @@ if __name__ == '__main__':
         print("Test image {:d}/{:d}: {:s}".format(k+1, len(image_list), image_path), end='\r')
         image = imgproc.loadImage(image_path)
 
-        bboxes, polys, score_text = test_net(net, image, args.text_threshold, args.link_threshold, args.low_text, args.cuda, args.poly, refine_net)
+        part_h = math.floor(image.shape[0] / args.divisor)
+        part_w = math.floor(image.shape[1] / args.divisor)
 
-        # save score text
-        filename, file_ext = os.path.splitext(os.path.basename(image_path))
-        mask_file = result_folder + "/res_" + filename + '_mask.jpg'
-        cv2.imwrite(mask_file, score_text)
+        # divide the whole image into sub-images
+        for r in range(args.divisor):
+            for c in range(args.divisor):
+                part = image[r*part_h+1:(r+1)*part_h, c*part_w+1:(c+1)*part_w, :]
 
-        file_utils.saveResult(image_path, image[:,:,::-1], polys, dirname=result_folder)
+                bboxes, polys, score_text = test_net(net, part, args.text_threshold, args.link_threshold, args.low_text, args.cuda, args.poly, refine_net)
+
+                # save mask
+                filename, file_ext = os.path.splitext(os.path.basename(image_path))
+                if not os.path.exists(os.path.join(result_folder, filename)):
+                    grp_fold = os.path.join(result_folder, filename)
+                    os.makedirs(grp_fold)
+
+                mask_file = os.path.join(grp_fold, f"res_{r}{c}_{filename}_mask.jpg")
+                cv2.imwrite(mask_file, score_text)
+
+                # save txt and result image
+                file_utils.saveResult(image_path, part[:,:,::-1], polys, r, c, dirname=grp_fold)
 
     print("elapsed time : {}s".format(time.time() - t))
