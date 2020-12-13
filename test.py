@@ -47,6 +47,7 @@ def str2bool(v):
 
 parser = argparse.ArgumentParser(description='CRAFT Text Detection')
 parser.add_argument('--divisor', default=3, type=int, help='sub images (div * div')
+parser.add_argument('--exclusion', type=str, help='denied words. Separate by comma')
 parser.add_argument('--trained_model', default='weights/craft_mlt_25k.pth', type=str, help='pretrained model')
 parser.add_argument('--text_threshold', default=0.7, type=float, help='text confidence threshold')
 parser.add_argument('--low_text', default=0.4, type=float, help='text low-bound score')
@@ -69,6 +70,8 @@ image_list, _, _ = file_utils.get_files(args.test_folder)
 result_folder = './result/'
 if not os.path.isdir(result_folder):
     os.mkdir(result_folder)
+
+excl = [w.strip() for w in args.exclusion.split(',')]
 
 def test_net(net, image, text_threshold, link_threshold, low_text, cuda, poly, refine_net=None):
     t0 = time.time()
@@ -184,11 +187,16 @@ if __name__ == '__main__':
                     pts = box.reshape((-1, 1, 2))
                     pts = np.add([c*part_w, r*part_h], np.int32(pts))
                     
-                    # save box region
-                    region = imgproc.cropRegion(image, pts, 5)
-                    cv2.imwrite(
-                        os.path.join(res_img_fold, f"{filename}_box_{r}{c}{i}{ext}"), 
-                        region[:, :, ::-1])
+                    # recognise text and save box region
+                    region = imgproc.cropRegion(image, pts)
+                    region, text = imgproc.reconTxt(region, excl)
+
+                    if text is not None and bool(text.strip()):
+                        cv2.imwrite(
+                            os.path.join(res_img_fold, f"{filename}_box_{r}{c}{i}{ext}"), 
+                            region)
+                        with open(os.path.join(res_img_fold, f"{filename}_box_{r}{c}{i}.txt"), "w") as f:
+                            f.write(text)
                     
                     # draw boxes on full image
                     cv2.polylines(image, [pts], True, color=(0, 0, 255), thickness=2)

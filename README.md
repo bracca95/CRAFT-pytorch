@@ -20,6 +20,9 @@ PyTorch implementation for CRAFT text detector that effectively detect text area
 
 ## Getting started
 ### Install dependencies
+For detection: pytesseract
+`libleptonica-dev tesseract-ocr tesseract-ocr libtesseract-dev`
+
 #### Requirements
 - PyTorch>=0.4.1
 - torchvision>=0.2.1

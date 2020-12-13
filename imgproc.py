@@ -5,8 +5,9 @@ MIT License
 
 # -*- coding: utf-8 -*-
 import numpy as np
-from skimage import io
+import pytesseract as ocr
 import cv2
+from skimage import io
 
 def loadImage(img_file):
     img = io.imread(img_file)           # RGB order
@@ -89,3 +90,38 @@ def cropRegion(img, pts, rang=0):
     crop_img = img[min_r : max_r, min_c : max_c, :]
 
     return crop_img
+
+
+def reconTxt(img, exclusion, kernel=None, iterat=1):
+    """recognise text from image
+
+    Args:
+    - img: image to analyse
+    - exclusion: word to exclude from detection
+    - kernel: kernel size for morphological operations (default = (2, 1))
+    - iter: kernel iteration (default = 1)
+    """
+
+    img_gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    img_gray, img_bin = cv2.threshold(img_gray, 200, 255, cv2.THRESH_BINARY)
+    img_gray = cv2.bitwise_not(img_bin)
+
+    if kernel:
+        assert type(kernel)==tuple, "provide a tuple for kernel"
+        # define a filter kernel
+        kernel = np.ones(kernel, np.uint8)
+
+        # open filter: erosion + dilation
+        img_fin = cv2.erode(img_gray, kernel, iterat)
+        img_fin = cv2.dilate(img_fin, kernel, iterat)
+
+    img_fin = img_gray
+
+    # detect work
+    txt = ocr.image_to_string(img_fin)
+    
+    for denied in exclusion:
+        if txt.lower().strip() in denied.lower():
+            txt = None
+
+    return img_fin, txt
