@@ -68,3 +68,24 @@ def cvt2HeatmapImg(img):
     img = (np.clip(img, 0, 1) * 255).astype(np.uint8)
     img = cv2.applyColorMap(img, cv2.COLORMAP_JET)
     return img
+
+
+def cropRegion(img, pts, rang=0):
+    """crop image
+
+    Args:
+    - img: the image to crop
+    - pts: points of detection area (shape is mandatory)
+    - rang: default=0. extra space to add around detection box
+    """
+
+    assert pts.shape[1] == 1 and pts.shape[2] == 2, "shape must be (-1, 1, 2)"
+    
+    min_r = min(pts[:, :, 1])[0] - rang
+    max_r = max(pts[:, :, 1])[0] + rang
+    min_c = min(pts[:, :, 0])[0] - rang
+    max_c = max(pts[:, :, 0])[0] + rang
+    
+    crop_img = img[min_r : max_r, min_c : max_c, :]
+
+    return crop_img

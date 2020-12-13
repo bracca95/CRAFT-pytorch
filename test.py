@@ -29,6 +29,7 @@ import zipfile
 from craft import CRAFT
 
 from collections import OrderedDict
+
 def copyStateDict(state_dict):
     if list(state_dict.keys())[0].startswith("module"):
         start_idx = 1
@@ -161,6 +162,11 @@ if __name__ == '__main__':
     for k, image_path in enumerate(image_list):
         print("Test image {:d}/{:d}: {:s}".format(k+1, len(image_list), image_path), end='\r')
         image = imgproc.loadImage(image_path)
+        
+        # prepare result folder
+        filename, ext = os.path.splitext(os.path.basename(image_path))
+        res_img_fold = os.path.join(result_folder, filename)
+        if not os.path.exists(res_img_fold): os.makedirs(res_img_fold)
 
         part_h = math.floor(image.shape[0] / args.divisor)
         part_w = math.floor(image.shape[1] / args.divisor)
@@ -171,15 +177,23 @@ if __name__ == '__main__':
 
                 part = image[r*part_h+1:(r+1)*part_h, c*part_w+1:(c+1)*part_w, :]
                 bboxes, polys, score_text = test_net(net, part, args.text_threshold, args.link_threshold, args.low_text, args.cuda, args.poly, refine_net)
-
-                # save full img
+                
+                # draw boxes around detected characters
                 for i, box in enumerate(polys):
                     # pts is a collection of array [width, height], the opposite of row, col
                     pts = box.reshape((-1, 1, 2))
-                    pts = np.add([c*part_w, r*part_h], pts)
-                    cv2.polylines(image, np.int32([pts]), True, color=(0, 0, 255), thickness=2)
-
-        filename, ext = os.path.splitext(os.path.basename(image_path))
-        cv2.imwrite(os.path.join(result_folder, f"{filename}{ext}"), image[:, :, ::-1])
+                    pts = np.add([c*part_w, r*part_h], np.int32(pts))
+                    
+                    # save box region
+                    region = imgproc.cropRegion(image, pts, 5)
+                    cv2.imwrite(
+                        os.path.join(res_img_fold, f"{filename}_box_{r}{c}{i}{ext}"), 
+                        region[:, :, ::-1])
+                    
+                    # draw boxes on full image
+                    cv2.polylines(image, [pts], True, color=(0, 0, 255), thickness=2)
+        
+        # save images
+        cv2.imwrite(os.path.join(res_img_fold, f"{filename}{ext}"), image[:, :, ::-1])
 
     print("elapsed time : {}s".format(time.time() - t))
