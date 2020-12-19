@@ -46,8 +46,10 @@ def str2bool(v):
     return v.lower() in ("yes", "y", "true", "t", "1")
 
 parser = argparse.ArgumentParser(description='CRAFT Text Detection')
+parser.add_argument('--debug', default=False, type=str2bool, help='debug mode')
 parser.add_argument('--divisor', default=3, type=int, help='sub images (div * div')
-parser.add_argument('--exclusion', type=str, help='denied words. Separate by comma')
+parser.add_argument('--exclusion', default="", type=str, help='denied words. Separate by comma')
+parser.add_argument('--baw', default=True, type=str2bool, help='already black numbers on white bckgrnd')
 parser.add_argument('--trained_model', default='weights/craft_mlt_25k.pth', type=str, help='pretrained model')
 parser.add_argument('--text_threshold', default=0.7, type=float, help='text confidence threshold')
 parser.add_argument('--low_text', default=0.4, type=float, help='text low-bound score')
@@ -188,10 +190,19 @@ if __name__ == '__main__':
                     pts = np.add([c*part_w, r*part_h], np.int32(pts))
                     
                     # recognise text and save box region
-                    region = imgproc.cropRegion(image, pts)
-                    region, text = imgproc.reconTxt(region, excl)
+                    region = imgproc.cropRegion(image, pts, rang=-5)
 
-                    if text is not None and bool(text.strip()):
+                    try:
+                        region, text = imgproc.reconTxt(region, excl, args.baw)
+                    except Exception:
+                        print("error in image:", image_path)
+
+                    # check if numbers are black
+                    if args.debug:
+                        cv2.imwrite(os.path.join(res_img_fold, 
+                            f"{filename}_box_{r}{c}{i}{ext}"), region)
+
+                    if bool(text.strip()):
                         cv2.imwrite(
                             os.path.join(res_img_fold, f"{filename}_box_{r}{c}{i}{ext}"), 
                             region)

@@ -4,6 +4,7 @@ MIT License
 """
 
 # -*- coding: utf-8 -*-
+import sys
 import numpy as np
 import pytesseract as ocr
 import cv2
@@ -77,51 +78,77 @@ def cropRegion(img, pts, rang=0):
     Args:
     - img: the image to crop
     - pts: points of detection area (shape is mandatory)
-    - rang: default=0. extra space to add around detection box
+    - rang: default=0. Extra space around detection box. Subtract to shrink
+
+    https://stackoverflow.com/a/48301735/7347566
     """
 
     assert pts.shape[1] == 1 and pts.shape[2] == 2, "shape must be (-1, 1, 2)"
-    
-    min_r = min(pts[:, :, 1])[0] - rang
-    max_r = max(pts[:, :, 1])[0] + rang
-    min_c = min(pts[:, :, 0])[0] - rang
-    max_c = max(pts[:, :, 0])[0] + rang
-    
-    crop_img = img[min_r : max_r, min_c : max_c, :]
 
-    return crop_img
+    # Crop a bounding rect around the shape
+    rect = cv2.boundingRect(pts)
+    x,y,w,h = rect
+    cropped = img[y-rang:y+h+rang, x-rang:x+w+rang].copy()
+
+    # make mask of the polygon
+    pts = pts - pts.min(axis=0)
+    mask = np.zeros(cropped.shape[:2], np.uint8)
+    cv2.drawContours(mask, [pts], -1, (255, 255, 255), -1, cv2.LINE_AA)
+
+    # do bit-op
+    dst = cv2.bitwise_and(cropped, cropped, mask=mask)
+
+    # add the white background
+    bg = np.ones_like(cropped, np.uint8)*255
+    cv2.bitwise_not(bg,bg, mask=mask)
+    dst2 = bg + dst
+
+    return dst2
 
 
-def reconTxt(img, exclusion, kernel=None, iterat=1):
+def reconTxt(img, exclusion, baw, ktype=None, ksize=None, iterat=1):
     """recognise text from image
 
     Args:
     - img: image to analyse
     - exclusion: word to exclude from detection
-    - kernel: kernel size for morphological operations (default = (2, 1))
+    - baw: bool: true if images are already in a black & white representation
+    - ktype: string: "median" or "morpho". None if not willing to use
+    - kezie: kernel size for morphological operations. Suggested (2, 1) for morpho; 15 for median
     - iter: kernel iteration (default = 1)
     """
 
-    img_gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    img_gray, img_bin = cv2.threshold(img_gray, 200, 255, cv2.THRESH_BINARY)
-    img_gray = cv2.bitwise_not(img_bin)
+    # check any problems with the image
+    try:
+        img_gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    except cv2.error as err:
+        raise Exception from err
+        sys.exit(1)
 
-    if kernel:
-        assert type(kernel)==tuple, "provide a tuple for kernel"
+    img_gray, img_bin = cv2.threshold(img_gray, 200, 255, cv2.THRESH_BINARY)
+
+    if baw: img_gray = img_bin.copy()
+    else: img_gray = cv2.bitwise_not(img_bin)
+    
+    if ktype == "morpho":
+        assert ksize is not None, "ksize cannot be None. Suggested: (2, 1)"
+        
         # define a filter kernel
         kernel = np.ones(kernel, np.uint8)
 
         # open filter: erosion + dilation
         img_fin = cv2.erode(img_gray, kernel, iterat)
         img_fin = cv2.dilate(img_fin, kernel, iterat)
+    
+    elif ktype == "median":
+        assert ksize is not None, "ksize cannot be None. Suggested: 15"
+        img_fin = cv2.medianBlur(img_gray, ksize)
+    
+    else:
+        img_fin = img_gray.copy()
 
-    img_fin = img_gray
 
     # detect work
     txt = ocr.image_to_string(img_fin)
-    
-    for denied in exclusion:
-        if txt.lower().strip() in denied.lower():
-            txt = None
 
     return img_fin, txt
