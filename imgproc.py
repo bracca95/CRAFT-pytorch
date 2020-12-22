@@ -9,6 +9,7 @@ import math
 import numpy as np
 import pytesseract as ocr
 import cv2
+import matplotlib.pyplot as plt
 from skimage import io
 
 def loadImage(img_file):
@@ -151,7 +152,7 @@ def reconTxt(img, exclusion, baw, ktype=None, ksize=None, iterat=1):
     if baw: img_gray = img_bin.copy()
     else: img_gray = cv2.bitwise_not(img_bin)
 
-    img_gray = upscale(img_gray, 3)
+    img_gray = enlarge(img_gray)
     
     if ktype == "morpho":
         assert ksize is not None, "ksize cannot be None. Suggested: (5, 5)"
@@ -171,6 +172,41 @@ def reconTxt(img, exclusion, baw, ktype=None, ksize=None, iterat=1):
     txt = ocr.image_to_string(img_fin)
 
     return img_fin, txt
+
+
+def enlarge(img):
+    """enlarge
+
+    use matplotlib to save a bigger version of the image. Instead of upscaling,
+    the pixel width is enlarged according to matplotlib.pyplot and the output
+    is saved to a numpy array
+
+    Args:
+    - img: numpy image
+
+    Output:
+    - numpy image
+
+    https://stackoverflow.com/a/43363727/7347566
+    https://stackoverflow.com/a/7821917/7347566
+    """
+
+    fig = plt.figure()
+
+    plt.imshow(img, cmap="gray")
+    plt.axis("off")
+    
+    # draw canvas
+    fig.canvas.draw()
+
+    # Now we can save it to a numpy array.
+    data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+    data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+
+    plt.clf()
+    plt.close()
+
+    return data
 
 
 def upscale(img, factor):

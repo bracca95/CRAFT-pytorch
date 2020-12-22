@@ -193,7 +193,7 @@ if __name__ == '__main__':
                     region = imgproc.cropRegion(part, pts)
 
                     try:
-                        region, text = imgproc.reconTxt(region, excl, args.baw)
+                        region, text = imgproc.reconTxt(region, excl, args.baw, ktype="median", ksize=15)
 
                         # check if numbers are black
                         if args.debug:
