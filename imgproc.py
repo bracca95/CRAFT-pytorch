@@ -5,6 +5,7 @@ MIT License
 
 # -*- coding: utf-8 -*-
 import sys
+import math
 import numpy as np
 import pytesseract as ocr
 import cv2
@@ -72,6 +73,23 @@ def cvt2HeatmapImg(img):
     return img
 
 
+def getAngle(angle):
+    '''arg: angle of the original box. Return the angle to make it horizontal'''
+    
+    if angle < -45 and angle >= -90: newAngle = 90 - abs(angle)
+    else: newAngle = 0 - abs(angle)
+
+    return newAngle
+
+
+def getCentre(pts):
+    '''arg: points of rectangle. Get its centre as tuple'''
+
+    centre_w = math.floor((max(pts[:, :, 0])[0] + min(pts[:, :, 0])[0]) / 2)
+    centre_h = math.floor((max(pts[:, :, 1])[0] + min(pts[:, :, 1])[0]) / 2)
+    return (centre_w, centre_h)
+
+
 def cropRegion(img, pts, rang=0):
     """crop image
 
@@ -85,25 +103,28 @@ def cropRegion(img, pts, rang=0):
 
     assert pts.shape[1] == 1 and pts.shape[2] == 2, "shape must be (-1, 1, 2)"
 
-    # Crop a bounding rect around the shape
-    rect = cv2.boundingRect(pts)
-    x,y,w,h = rect
-    cropped = img[y-rang:y+h+rang, x-rang:x+w+rang].copy()
+    # create and draw mask
+    mask = np.zeros(img.shape[:-1], np.uint8)
+    cv2.fillConvexPoly(mask, pts, 255)
 
-    # make mask of the polygon
-    pts = pts - pts.min(axis=0)
-    mask = np.zeros(cropped.shape[:2], np.uint8)
-    cv2.drawContours(mask, [pts], -1, (255, 255, 255), -1, cv2.LINE_AA)
+    # get tuple for angle ((min_x, min_y), (max_x, max_y), angle)
+    tuple_rect = cv2.minAreaRect(pts)
+    angleDEG = getAngle(tuple_rect[-1])
+    cog = getCentre(pts)
 
-    # do bit-op
-    dst = cv2.bitwise_and(cropped, cropped, mask=mask)
+    # create rotation mat
+    transformation = cv2.getRotationMatrix2D(cog, angleDEG, 1)
 
-    # add the white background
-    bg = np.ones_like(cropped, np.uint8)*255
-    cv2.bitwise_not(bg,bg, mask=mask)
-    dst2 = bg + dst
+    # rotated mask holds the object position after rotation
+    rotatedMask = cv2.warpAffine(mask, transformation, (img.shape[1], img.shape[0]))
+    rotatedInput = cv2.warpAffine(img, transformation, (img.shape[1], img.shape[0]))
 
-    return dst2
+    # get non-zero values for mask and use them on the final image
+    h, w = np.nonzero(rotatedMask)
+    dst = cv2.bitwise_and(rotatedInput, rotatedInput, mask=rotatedMask)
+    dst = dst[h[0]:h[-1], w[0]:w[-1], :]
+
+    return dst
 
 
 def reconTxt(img, exclusion, baw, ktype=None, ksize=None, iterat=1):
@@ -114,7 +135,7 @@ def reconTxt(img, exclusion, baw, ktype=None, ksize=None, iterat=1):
     - exclusion: word to exclude from detection
     - baw: bool: true if images are already in a black & white representation
     - ktype: string: "median" or "morpho". None if not willing to use
-    - kezie: kernel size for morphological operations. Suggested (2, 1) for morpho; 15 for median
+    - ksize: kernel size for morphological operations. Suggested (2, 1) for morpho; 15 for median
     - iter: kernel iteration (default = 1)
     """
 
@@ -125,20 +146,19 @@ def reconTxt(img, exclusion, baw, ktype=None, ksize=None, iterat=1):
         raise Exception from err
         sys.exit(1)
 
-    img_gray, img_bin = cv2.threshold(img_gray, 200, 255, cv2.THRESH_BINARY)
+    img_gray, img_bin = cv2.threshold(img_gray, 200, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
 
     if baw: img_gray = img_bin.copy()
     else: img_gray = cv2.bitwise_not(img_bin)
+
+    img_gray = upscale(img_gray, 3)
     
     if ktype == "morpho":
-        assert ksize is not None, "ksize cannot be None. Suggested: (2, 1)"
-        
-        # define a filter kernel
-        kernel = np.ones(kernel, np.uint8)
+        assert ksize is not None, "ksize cannot be None. Suggested: (5, 5)"
 
-        # open filter: erosion + dilation
+        # define a filter kernel = erosion (enlarge blacks)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
         img_fin = cv2.erode(img_gray, kernel, iterat)
-        img_fin = cv2.dilate(img_fin, kernel, iterat)
     
     elif ktype == "median":
         assert ksize is not None, "ksize cannot be None. Suggested: 15"
@@ -147,8 +167,31 @@ def reconTxt(img, exclusion, baw, ktype=None, ksize=None, iterat=1):
     else:
         img_fin = img_gray.copy()
 
-
-    # detect work
+    # detect word
     txt = ocr.image_to_string(img_fin)
 
     return img_fin, txt
+
+
+def upscale(img, factor):
+    """upscale with opencv Gaussian Pyramid
+
+    Args:
+    - img: numpy image
+    - factor: upscale factor, number of times the upscaling is performed
+
+    Output:
+    - numpy image
+    """
+    
+    rows, cols = map(int, img.shape)
+
+    ## UPSCALE LOOP
+    for i in range(factor):
+        img_hr = cv2.pyrUp(img, dstsize=(2*cols, 2*rows))
+        
+        # update values
+        img = img_hr
+        rows, cols = map(int, img.shape)
+
+    return img

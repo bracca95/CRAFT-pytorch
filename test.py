@@ -185,31 +185,32 @@ if __name__ == '__main__':
                 
                 # draw boxes around detected characters
                 for i, box in enumerate(polys):
+
                     # pts is a collection of array [width, height], the opposite of row, col
-                    pts = box.reshape((-1, 1, 2))
-                    pts = np.add([c*part_w, r*part_h], np.int32(pts))
+                    pts = np.int32(box.reshape((-1, 1, 2)))
                     
                     # recognise text and save box region
-                    region = imgproc.cropRegion(image, pts, rang=-5)
+                    region = imgproc.cropRegion(part, pts)
 
                     try:
                         region, text = imgproc.reconTxt(region, excl, args.baw)
+
+                        # check if numbers are black
+                        if args.debug:
+                            cv2.imwrite(os.path.join(res_img_fold, 
+                                f"{filename}_box_{r}{c}{i}{ext}"), region)
+                        else:
+                            if bool(text.strip()):
+                                cv2.imwrite(
+                                    os.path.join(res_img_fold, f"{filename}_box_{r}{c}{i}{ext}"), 
+                                    region)
+                                with open(os.path.join(res_img_fold, f"{filename}_box_{r}{c}{i}.txt"), "w") as f:
+                                    f.write(text)
                     except Exception:
                         print("error in image:", image_path)
-
-                    # check if numbers are black
-                    if args.debug:
-                        cv2.imwrite(os.path.join(res_img_fold, 
-                            f"{filename}_box_{r}{c}{i}{ext}"), region)
-
-                    if bool(text.strip()):
-                        cv2.imwrite(
-                            os.path.join(res_img_fold, f"{filename}_box_{r}{c}{i}{ext}"), 
-                            region)
-                        with open(os.path.join(res_img_fold, f"{filename}_box_{r}{c}{i}.txt"), "w") as f:
-                            f.write(text)
-                    
+                        
                     # draw boxes on full image
+                    pts = np.add([c*part_w, r*part_h], pts)
                     cv2.polylines(image, [pts], True, color=(0, 0, 255), thickness=2)
         
         # save images
