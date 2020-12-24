@@ -128,7 +128,7 @@ def cropRegion(img, pts, rang=0):
     return dst
 
 
-def reconTxt(img, exclusion, baw, ktype=None, ksize=None, iterat=1):
+def reconTxt(img, reader, exclusion, baw, ktype=None, ksize=None, iterat=1):
     """recognise text from image
 
     Args:
@@ -152,7 +152,7 @@ def reconTxt(img, exclusion, baw, ktype=None, ksize=None, iterat=1):
     if baw: img_gray = img_bin.copy()
     else: img_gray = cv2.bitwise_not(img_bin)
 
-    img_gray = enlarge(img_gray)
+    img_gray = upscale(img_gray, 3)
     
     if ktype == "morpho":
         assert ksize is not None, "ksize cannot be None. Suggested: (5, 5)"
@@ -169,9 +169,10 @@ def reconTxt(img, exclusion, baw, ktype=None, ksize=None, iterat=1):
         img_fin = img_gray.copy()
 
     # detect word
-    txt = ocr.image_to_string(img_fin)
+    #txt = ocr.image_to_string(img_fin)
+    text = reader.recognize(img_fin)
 
-    return img_fin, txt
+    return img_fin, text
 
 
 def enlarge(img):

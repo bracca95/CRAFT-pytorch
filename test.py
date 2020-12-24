@@ -9,6 +9,7 @@ import math
 import os
 import time
 import argparse
+import easyocr
 
 import torch
 import torch.nn as nn
@@ -131,6 +132,7 @@ def test_net(net, image, text_threshold, link_threshold, low_text, cuda, poly, r
 if __name__ == '__main__':
     # load net
     net = CRAFT()     # initialize
+    reader = easyocr.Reader(["en"])
 
     print('Loading weights from checkpoint (' + args.trained_model + ')')
     if args.cuda:
@@ -193,19 +195,21 @@ if __name__ == '__main__':
                     region = imgproc.cropRegion(part, pts)
 
                     try:
-                        region, text = imgproc.reconTxt(region, excl, args.baw, ktype="median", ksize=15)
+                        region, text = imgproc.reconTxt(region, reader, excl, args.baw)
+                        
+                        new_basename = os.path.join(res_img_fold, f"{filename}_box_{r}{c}{i}")
 
-                        # check if numbers are black
+                        # print all images
                         if args.debug:
-                            cv2.imwrite(os.path.join(res_img_fold, 
-                                f"{filename}_box_{r}{c}{i}{ext}"), region)
+                            cv2.imwrite(f"{new_basename}{ext}", region)
                         else:
-                            if bool(text.strip()):
-                                cv2.imwrite(
-                                    os.path.join(res_img_fold, f"{filename}_box_{r}{c}{i}{ext}"), 
-                                    region)
-                                with open(os.path.join(res_img_fold, f"{filename}_box_{r}{c}{i}.txt"), "w") as f:
-                                    f.write(text)
+                            if bool(text[0][1].strip()) and text[0][1].isnumeric():
+                                cv2.imwrite(f"{new_basename}{ext}", region)
+                                with open(f"{new_basename}.txt", "w") as f:
+                                    f.write(text[0][1])
+                            else:
+                                pass
+                    
                     except Exception:
                         print("error in image:", image_path)
                         
